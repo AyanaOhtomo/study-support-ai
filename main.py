@@ -65,12 +65,12 @@ elif selected_page == ct.PAGE_HISTORY:
     logs_df = db.get_all_study_logs()
     cp.display_study_logs(logs_df)
 
-# 週間レポート
+# AIコーチング
 elif selected_page == ct.PAGE_AI_COACHING:
     weekly_summary = db.get_weekly_summary()
     cp.display_weekly_report(weekly_summary)
 
-    # 週間レポートのAI生成は、今週の学習記録がある場合のみ行う
+    # 今週の学習記録がある場合はAIコーチング機能を表示
     if weekly_summary["total_logs"] > 0:
         try:
             ai_report = ut.generate_weekly_report(weekly_summary)
@@ -78,41 +78,46 @@ elif selected_page == ct.PAGE_AI_COACHING:
         except Exception:
             st.error(ct.WEEKLY_REPORT_ERROR_MESSAGE)
 
-            # チャット履歴の初期化
-            if "ai_coach_messages" not in st.session_state:
-                st.session_state.ai_coach_messages = [
-                    {
-                        "role": "assistant",
-                        "content": ct.AI_COACH_INITIAL_MESSAGE
-                    }
-                ]
+        # チャット履歴の初期化
+        if "ai_coach_messages" not in st.session_state:
+            st.session_state.ai_coach_messages = [
+                {
+                    "role": "assistant",
+                    "content": ct.AI_COACH_INITIAL_MESSAGE
+                }
+            ]
 
-            # チャット履歴表示
-            cp.display_ai_chat_messages(st.session_state.ai_coach_messages)
+        # チャット履歴表示
+        cp.display_ai_chat_messages(st.session_state.ai_coach_messages)
 
-            # チャット入力
-            user_message = st.chat_input(ct.AI_CHAT_INPUT_PLACEHOLDER)
+        # チャット入力
+        user_message = st.chat_input(ct.AI_CHAT_INPUT_PLACEHOLDER)
 
-            if user_message:
-                # ユーザー発言を履歴追加
-                st.session_state.ai_coach_messages.append(
-                    {"role": "user", "content": user_message}
+        if user_message:
+            # ユーザー発言を履歴追加
+            st.session_state.ai_coach_messages.append(
+                {"role": "user", "content": user_message}
+            )
+
+            # 履歴を文字列に変換
+            chat_history_text = "\n".join([
+                f"{m['role']}: {m['content']}"
+                for m in st.session_state.ai_coach_messages
+            ])
+
+            try:
+                ai_reply = ut.generate_ai_coaching_reply(
+                    weekly_summary,
+                    user_message,
+                    chat_history_text
                 )
 
-                try:
-                    ai_reply = utils.generate_ai_coaching_reply(
-                        weekly_summary,
-                        user_message
-                    )
+                # AI回答を履歴追加
+                st.session_state.ai_coach_messages.append(
+                    {"role": "assistant", "content": ai_reply}
+                )
 
-                    # AI回答を履歴追加
-                    st.session_state.ai_coach_messages.append(
-                        {"role": "assistant", "content": ai_reply}
-                    )
+                st.rerun()
 
-                    st.rerun()
-
-                except Exception:
-                    st.error(ct.AI_CHAT_ERROR_MESSAGE)
-        else:
-            st.info(ct.NO_WEEKLY_DATA_MESSAGE)       
+            except Exception:
+                    st.error(ct.AI_CHAT_ERROR_MESSAGE)    

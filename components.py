@@ -16,10 +16,10 @@ def display_sidebar():
         selected_page = st.radio(
             "表示ページを選択",
             [
-                ct.PAGE_DASHBOARD,
                 ct.PAGE_STUDY_LOG,
+                ct.PAGE_AI_COACHING,
                 ct.PAGE_HISTORY,
-                ct.PAGE_AI_COACHING
+                ct.PAGE_DASHBOARD
             ],
             label_visibility="collapsed"
         )
@@ -30,9 +30,7 @@ def display_app_title():
     """
     アプリのタイトルと説明を表示する
     """
-    st.title(f"📚 {ct.APP_TITLE}")
-    st.write(ct.WELCOME_MESSAGE)
-
+    st.title(f"🎓 {ct.APP_TITLE}")
 
 def display_study_log_form():
     """
@@ -43,6 +41,10 @@ def display_study_log_form():
             study_date, category, study_time, content,
             understanding, blocking_point, next_action, submit_button
     """
+    st.divider()
+    st.subheader("学習記録")
+    st.markdown("学習した内容や感じたことを記録しましょう！")
+
     with st.form(key="study_log_form"):
         st.subheader("学習記録を入力")
 
@@ -111,7 +113,7 @@ def display_dashboard(summary, category_df):
     """
     st.divider()
     st.subheader("ダッシュボード")
-    st.caption("学習状況をサマリーとグラフで確認できます。")
+    st.markdown("学習状況をサマリーとグラフで確認できます。")
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -122,7 +124,7 @@ def display_dashboard(summary, category_df):
         st.metric("平均理解度", f"{summary['average_understanding']} / 5")
 
     if not category_df.empty:
-        st.markdown("### 学習テーマ別の学習時間")
+        st.markdown("#### 学習テーマ別の学習時間")
 
         fig = px.bar(
             category_df,
@@ -154,6 +156,7 @@ def display_study_logs(logs_df):
     """
     st.divider()
     st.subheader("学習記録一覧")
+    st.markdown("今までの学習記録を振り返りましょう!")
 
     if logs_df.empty:
         st.info(ct.NO_DATA_MESSAGE)
@@ -167,11 +170,12 @@ def display_weekly_report(summary):
     """
     今週の学習サマリーを表示する
     """
+    st.divider()
     st.subheader("AIコーチング")
-    st.caption("AIコーチがあなたの学習状況を分析し、改善提案を行います。")
+    st.markdown("AIコーチがあなたの学習状況を分析し、改善提案を行います。")
 
     if summary["total_logs"] == 0:
-        st.info("今週の学習記録はまだありません。")
+        st.info(ct.NO_WEEKLY_DATA_MESSAGE)
         return
 
     with st.expander("📘 今週の学習サマリーを見る", expanded=True):
@@ -187,21 +191,14 @@ def display_weekly_report(summary):
             for point in summary["blocking_points"]:
                 st.markdown(f"- {point}")
         else:
-            st.write("記録はありません。")
+            st.write(ct.NO_DATA_MESSAGE)
 
         st.markdown("**次回やること**")
         if summary["next_actions"]:
             for action in summary["next_actions"]:
                 st.markdown(f"- {action}")
         else:
-            st.write("記録はありません。")
-
-    st.markdown("### 🤖 AIコーチからのフィードバック")
-    if summary["next_actions"]:
-        for action in summary["next_actions"]:
-            st.markdown(f"- {action}")
-    else:
-        st.write("記録はありません。")
+            st.write(ct.NO_DATA_MESSAGE)
 
 def display_ai_weekly_report(report_text):
     """
@@ -210,16 +207,8 @@ def display_ai_weekly_report(report_text):
     Args:
         report_text (str): AIが生成したレポート本文
     """
-    st.markdown("### 🤖 AIコーチからの週間フィードバック")
+    st.markdown("#### 🤖 AIコーチからの週間フィードバック")
     st.success(report_text)
-
-def display_ai_weekly_report(report_text):
-    """
-    AIが生成した週間フィードバックを表示する
-    """
-    st.markdown("### 🤖 AIコーチからの週間フィードバック")
-    st.info(report_text)
-
 
 def display_ai_chat_messages(messages):
     """
@@ -228,7 +217,7 @@ def display_ai_chat_messages(messages):
     Args:
         messages (list): チャットメッセージ一覧
     """
-    st.markdown("### 💬 AIコーチに相談する")
+    st.markdown("#### 💬 AIコーチに相談する")
 
     for message in messages:
         with st.chat_message(message["role"]):

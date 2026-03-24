@@ -102,6 +102,12 @@ def build_ai_coaching_chat_prompt():
 あなたはプログラミング学習を支援する優秀なAIコーチです。
 以下の今週の学習状況を踏まえて、学習者の質問に日本語で回答してください。
 
+【重要ルール】
+- 最初の1回だけ軽い挨拶をする（例：「学習おつかれさまです!」）
+- 2回目以降は挨拶を省略して回答する
+- 毎回同じ表現を繰り返さない
+- 自然な会話を意識する
+
 【回答ルール】
 - やさしく前向きな口調
 - 学習者を責めない
@@ -121,6 +127,9 @@ def build_ai_coaching_chat_prompt():
 【次回やること】
 {next_actions_text}
 
+【チャット履歴】
+{chat_history_text}
+
 【学習者の質問】
 {user_message}
 """
@@ -138,13 +147,14 @@ def build_ai_coaching_chat_prompt():
     )
 
 
-def generate_ai_coaching_reply(summary, user_message):
+def generate_ai_coaching_reply(summary, user_message, chat_history_text):
     """
     LangChain を使って AIコーチのチャット回答を生成する
 
     Args:
         summary (dict): 今週の学習サマリー
         user_message (str): ユーザーの質問
+        chat_history_text (str): チャット履歴
 
     Returns:
         str: AIコーチの回答
@@ -168,6 +178,7 @@ def generate_ai_coaching_reply(summary, user_message):
         "top_category": summary["top_category"],
         "blocking_points_text": blocking_points_text,
         "next_actions_text": next_actions_text,
+        "chat_history_text": chat_history_text,
         "user_message": user_message
     })
 
