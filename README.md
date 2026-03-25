@@ -10,7 +10,7 @@
 ## アプリ画面
 
 ### AIコーチング機能
-![AIコーチング](images/ai_coaching.jpg)
+<img src="images/ai_coaching.png" width="700">
 
 
 ## アプリ概要
