@@ -5,6 +5,27 @@ import constants as ct
 import utils as ut
 
 # ==========================================
+# 0. パスワード認証
+# ==========================================
+def check_password():
+    if st.session_state.get("authenticated"):
+        return
+    st.title("Study Support AI")
+    st.caption("デモ用ログイン画面です。README に記載のアカウント情報をご利用ください。")
+    username = st.text_input("ユーザー名")
+    password = st.text_input("パスワード", type="password")
+    if st.button("ログイン"):
+        if (username == st.secrets.get("DEMO_USERNAME", "")
+                and password == st.secrets.get("DEMO_PASSWORD", "")):
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("ユーザー名またはパスワードが違います")
+    st.stop()
+
+check_password()
+
+# ==========================================
 # 1. 初期設定
 # ==========================================
 db.initialize_db()
