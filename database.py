@@ -1,6 +1,6 @@
 import sqlite3
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import constants as ct
 
 # SQLiteのDBファイル名
@@ -17,7 +17,7 @@ def get_connection():
 
 def initialize_db():
     """
-    学習記録テーブルを作成する
+    学習記録テーブル・目標テーブルを作成する
     すでに存在する場合は何もしない
     """
     conn = get_connection()
@@ -37,8 +37,68 @@ def initialize_db():
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            target_minutes INTEGER NOT NULL,
+            goal_description TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+
     conn.commit()
     conn.close()
+
+
+def save_goal(target_minutes, goal_description):
+    """
+    目標を保存する（毎回追加し、最新の1件を有効な目標として扱う）
+
+    Args:
+        target_minutes (int): 週の目標学習時間（分）
+        goal_description (str): 学習目標の説明
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO goals (target_minutes, goal_description, created_at)
+        VALUES (?, ?, ?)
+    """, (target_minutes, goal_description, datetime.now().isoformat()))
+
+    conn.commit()
+    conn.close()
+
+
+def get_current_goal():
+    """
+    最新の目標を取得する
+
+    Returns:
+        dict or None:
+            target_minutes (int): 週の目標学習時間（分）
+            goal_description (str): 学習目標の説明
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT target_minutes, goal_description
+        FROM goals
+        ORDER BY id DESC
+        LIMIT 1
+    """)
+
+    row = cursor.fetchone()
+    conn.close()
+
+    if row is None:
+        return None
+
+    return {
+        "target_minutes": row[0],
+        "goal_description": row[1]
+    }
 
 def insert_study_log(
             study_date,
@@ -226,11 +286,81 @@ def get_weekly_summary():
         if str(value).strip()
     ]
 
+    # カテゴリ別にまとめた辞書（表示用）
+    blocking_points_by_category = {}
+    next_actions_by_category = {}
+
+    for _, row in weekly_df.iterrows():
+        category = row["category"]
+
+        bp = str(row["blocking_point"]).strip() if pd.notna(row["blocking_point"]) else ""
+        if bp:
+            blocking_points_by_category.setdefault(category, []).append(bp)
+
+        na = str(row["next_action"]).strip() if pd.notna(row["next_action"]) else ""
+        if na:
+            next_actions_by_category.setdefault(category, []).append(na)
+
     return {
         "total_study_time": total_study_time,
         "total_logs": total_logs,
         "average_understanding": average_understanding,
         "top_category": top_category,
         "blocking_points": blocking_points,
-        "next_actions": next_actions
+        "next_actions": next_actions,
+        "blocking_points_by_category": blocking_points_by_category,
+        "next_actions_by_category": next_actions_by_category
     }
+
+
+def get_daily_study_time():
+    """
+    日付ごとの合計学習時間を取得する（折れ線グラフ用）
+
+    Returns:
+        pd.DataFrame:
+            study_date (str): 学習日
+            学習時間 (int): その日の合計学習時間（分）
+    """
+    conn = get_connection()
+
+    query = """
+        SELECT
+            study_date,
+            SUM(study_time) AS 学習時間
+        FROM study_logs
+        GROUP BY study_date
+        ORDER BY study_date ASC
+    """
+
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+
+    return df
+
+
+def get_study_streak():
+    """
+    今日を起点とした連続学習日数を返す
+    今日の記録がない場合は 0 を返す
+
+    Returns:
+        int: 連続学習日数
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT DISTINCT study_date FROM study_logs")
+    rows = cursor.fetchall()
+    conn.close()
+
+    # 学習済み日付を date 型の集合に変換
+    study_dates = {date.fromisoformat(row[0]) for row in rows}
+
+    streak = 0
+    check = date.today()
+    while check in study_dates:
+        streak += 1
+        check -= timedelta(days=1)
+
+    return streak
