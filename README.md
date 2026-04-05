@@ -7,10 +7,8 @@
 
 デモはこちらから試せます → https://study-support-ai-fne7fdbozv7rrosfcev7cc.streamlit.app/
 
-| | |
-|---|---|
-| ユーザー名 | `demo` |
-| パスワード | `study2026` |
+- ユーザー名: `demo`
+- パスワード: `study2026`
 
 ---
 
