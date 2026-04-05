@@ -180,42 +180,35 @@ v2 では、DBの操作を安心して改修できる環境を整えるため、
 
 ### 7. Claude Code hooks による自動テスト実行
 
-Claude Code が **`Write` / `Edit`** でファイルを保存した直後に、`tests/test_database.py` を pytest する **PostToolUse フック**を `.claude/settings.local.json` に定義しています（対象は `.py` のみ。それ以外はスキップ）。
-
-#### 工夫した点・苦労した点（Cursor と確認しながら進めた）
-
-フックは「設定 JSON」と「PowerShell」「Claude 側の stdin 渡し」が噛み合わないと **黙って動かない**ことがあり、ログも取れないと原因が見えません。そこで **Cursor をメインの作業場所**にして、次のループで詰めました。
-
-1. **ログを正とする**  
-   `.claude/hooks/hook.log` を Cursor で開き、編集のたびに **末尾のタイムスタンプとメッセージが増えるか**を確認。ここが動かない段階では、アプリ本体ではなく **フック〜スクリプトの経路**に問題があると切り分けました。
-
-2. **Cursor の AI に「状況の整理」と修正案のたたき台を依頼**  
-   ログに出た `JSON parse failed` や `skip:`、重複行などを貼り、**stdin の読み方・JSON の形・マッチャー**のどこを疑うべきかを一緒に整理。返ってきた案を **自分で読み、必要なら縮小して** `run-tests.ps1` や `settings.local.json` に反映しました。
-
-3. **差分と再実行で検証**  
-   修正後は Claude Code で再度 `.py` を編集させ、同じく `hook.log` と pytest の結果で **成功パス**（`hook started` → `file changed` → `tests passed`）になるまで繰り返し。設定の再読み込みが必要なときは、Cursor の **Exit でいったん終了して入り直す**／**ウィンドウの再読み込み**で切り分けました。
-
-4. **見えてきた落とし穴の整理**  
-   * マッチャーを1本にまとめると **`Edit` が拾われない**環境があるため、`Write` と `Edit` を **別ブロック**で登録  
-   * 長い `powershell -Command` は **`$変数` が壊れる**ことがあるため、**`.claude/hooks/run-hook.cmd`** から `run-tests.ps1` を `-File` 起動だけに寄せた  
-   * ログは **UTF-8（BOM なし）で追記**に統一し、混在で **NUL が入ってエディタが開けない**事象を防いだ  
-   * ログパスは **`$PSScriptRoot\hook.log` に固定**し、誤ったパス結合で **プロジェクト直下に変な名前の `.log`** ができる問題を避けた  
-
-このプロセスを通じて、「**Claude Code がフックを発火させる**」「**Cursor でログとコードを突き合わせて直す**」役割分担がはっきりし、**自分の判断で仮説→検証**を回せるようになった点を、このプロジェクトでは強みとしてまとめています。
-
-#### 構成ファイル
+Claude Code が `Write` / `Edit` でファイルを保存した直後に `tests/test_database.py` を自動実行する PostToolUse フックを設定しています。  
+対象は `.py` ファイルのみ。Cursor と役割を分担しながら、ログベースで仮説→検証を繰り返して動作を安定させました。
 
 | ファイル | 役割 |
 |---|---|
-| `.claude/settings.local.json` | `PostToolUse` のマッチャーと起動コマンド（ローカル設定・gitignore 想定） |
-| `.claude/hooks/run-hook.cmd` | `run-tests.ps1` を `-File` で起動し、stdin をそのまま渡すラッパー |
-| `.claude/hooks/run-tests.ps1` | JSON から対象パスを取得し、`.py` なら venv で pytest → `hook.log` に追記 |
+| `.claude/settings.local.json` | PostToolUse のマッチャーと起動コマンド |
+| `.claude/hooks/run-hook.cmd` | `run-tests.ps1` を `-File` で起動するラッパー |
+| `.claude/hooks/run-tests.ps1` | `.py` なら venv で pytest → `hook.log` に追記 |
 
-#### トラブル時の目安（読者向けメモ）
+<details>
+<summary>実装の工夫・詰まった点（詳細）</summary>
 
-* `hook.log` に **`hook started` が増えない** → フック未実行（設定の再読み込みや `/hooks` で登録確認）
-* **`skip: not a .py file`** → フックは動いているが、編集対象が `.py` ではない
-* プロジェクト直下に **意味の長い `.log` ファイル**ができる → パス誤結合などで別出力が混ざった可能性。**正規のログは `.claude\hooks\hook.log`**
+フックは「設定 JSON」「PowerShell」「Claude 側の stdin 渡し」が噛み合わないと黙って動かないことがあり、ログも取れないと原因が見えません。Cursor をメインの作業場所にして、次のループで詰めました。
+
+1. ログを正とする — `.claude/hooks/hook.log` を Cursor で開き、末尾のタイムスタンプが増えるかを確認。動かない段階ではアプリ本体ではなくフック〜スクリプトの経路に問題があると切り分け。
+
+2. Cursor の AI に状況整理を依頼 — ログに出た `JSON parse failed` や `skip:` を貼り、stdin の読み方・JSON の形・マッチャーのどこを疑うべきかを整理。案を自分で読み、必要なら縮小して反映。
+
+3. 差分と再実行で検証 — 修正後は Claude Code で `.py` を再編集させ、`hook started` → `file changed` → `tests passed` の成功パスになるまで繰り返し。
+
+4. 見えてきた落とし穴
+   * `Write` と `Edit` は別ブロックで登録しないと `Edit` が拾われない環境がある
+   * 長い `powershell -Command` は `$変数` が壊れることがあるため、`run-hook.cmd` から `-File` 起動に寄せた
+   * ログは UTF-8（BOM なし）追記に統一（混在で NUL が入りエディタが開けなくなる）
+   * ログパスは `$PSScriptRoot\hook.log` に固定（パス誤結合でプロジェクト直下に変な名前の `.log` ができる問題を防止）
+
+このプロセスを通じて「Claude Code がフックを発火」「Cursor でログとコードを突き合わせて直す」役割分担が確立し、自分の判断で仮説→検証を回せるようになりました。
+
+</details>
 
 ---
 
@@ -225,7 +218,7 @@ Claude Code が **`Write` / `Edit`** でファイルを保存した直後に、`
 
 * Python 3.11（仮想環境 venv）
 * Windows 11
-* Git / GitHub（`v2-dev` ブランチで開発）
+* Git / GitHub（`main` ブランチ、`v1.0` タグで v1 を保存）
 
 ### v1 と v2 の開発スタイルの違い
 
@@ -238,18 +231,18 @@ v1 でアプリの土台を自分で作り切ったうえで、v2 ではAIツー
 
 ### v2 で使用した AI 開発ツール
 
-| | **Cursor** | **Claude Code** |
+| | Cursor | Claude Code |
 |---|---|---|
-| **ざっくり** | AI 付きのコードエディタ（チャット・Agent・ターミナルなど） | エディタに載る **Claude のコーディングエージェント**（**会話とプロンプト形式**で指示し、リポジトリを編集） |
-| **v2 での使い方** | コード編集・差分確認・ローカル起動・動作確認、Cursor 内 AI による実装支援、**hooks 調整時は `hook.log` とスクリプトを見ながら検証** | 改善方針・タスク分解、複数ファイルにまたがる改修、**.claude 配下（hooks / skills）** のメンテナンス、テスト自動化まわりの切り分け |
-| **PostToolUse フック** | Cursor 上での保存だけでは **自動 pytest は走らない** | **`Write` / `Edit` で保存した直後**に `run-tests.ps1` が走る |
+| ざっくり | AI 付きのコードエディタ（チャット・Agent・ターミナルなど） | 会話とプロンプト形式で指示し、リポジトリを編集するコーディングエージェント |
+| v2 での使い方 | コード編集・差分確認・ローカル起動・動作確認、hooks 調整時は `hook.log` とスクリプトを見ながら検証 | 改善方針・タスク分解、複数ファイルにまたがる改修、`.claude` 配下（hooks / skills）のメンテナンス、テスト自動化まわりの切り分け |
+| PostToolUse フック | Cursor 上での保存だけでは自動 pytest は走らない | `Write` / `Edit` で保存した直後に `run-tests.ps1` が走る |
 
-**併用のイメージ**
+併用のイメージ
 
-* **Claude Code** … 「何を・どの順でやるか」の整理、Claude 経由の編集（このとき hooks 経由で pytest）
-* **Cursor** … 日々の編集・デバッグ、UI の細かい調整、ログとコードを突き合わせた検証
+* Claude Code … 「何を・どの順でやるか」の整理、Claude 経由の編集（このとき hooks 経由で pytest）
+* Cursor … 日々の編集・デバッグ、UI の細かい調整、ログとコードを突き合わせた検証
 
-どちらの AI と話しているかは、**Claude Code のチャットか Cursor のチャットか**で区別すると分かりやすいです。各ファイルの役割（UI / DB / AI）は崩さないよう意識しています。
+どちらの AI と話しているかは、Claude Code のチャットか Cursor のチャットかで区別すると分かりやすいです。各ファイルの役割（UI / DB / AI）は崩さないよう意識しています。
 
 ---
 
